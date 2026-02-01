@@ -1,0 +1,812 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "workspace": {
+      "type": "String"
+    }
+  },
+  "resources": [
+    {
+      "id": "[concat(resourceId('Microsoft.OperationalInsights/workspaces/providers', parameters('workspace'), 'Microsoft.SecurityInsights'),'/alertRules/','11111111-1111-1111-1111-111111111101')]",
+      "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/','11111111-1111-1111-1111-111111111101')]",
+      "type": "Microsoft.OperationalInsights/workspaces/providers/alertRules",
+      "kind": "Scheduled",
+      "apiVersion": "2022-11-01-preview",
+      "properties": {
+        "displayName": "Unauthorized AI Agent - File Artifact Detection",
+        "description": "Detects file artifacts associated with Clawdbot, Moltbot, or OpenClaw AI agent tools including configuration files, credentials, and workspace directories.",
+        "severity": "Medium",
+        "enabled": true,
+        "query": "DeviceFileEvents\n| where TimeGenerated > ago(1h)\n| where FolderPath has_any (\n    \".clawdbot\",\n    \".moltbot\", \n    \".openclaw\",\n    \"openclaw.json\",\n    \"moltbot.json\",\n    \"clawdbot.json\"\n)\n| extend ArtifactType = case(\n    FolderPath has \".clawdbot\", \"Clawdbot\",\n    FolderPath has \".moltbot\", \"Moltbot\",\n    FolderPath has \".openclaw\", \"OpenClaw\",\n    \"Unknown\"\n)\n| extend ArtifactCategory = case(\n    FolderPath has \"credentials\" or FolderPath has \"oauth\", \"Credentials\",\n    FolderPath has \"config\" or FolderPath has \".json\", \"Configuration\",\n    FolderPath has \"workspace\" or FolderPath has \"sandbox\", \"Workspace\",\n    FolderPath has \"agents\", \"Multi-Agent\",\n    \"General\"\n)\n| project \n    TimeGenerated,\n    DeviceName,\n    DeviceId,\n    FileName,\n    FolderPath,\n    ActionType,\n    ArtifactType,\n    ArtifactCategory,\n    InitiatingProcessFileName,\n    InitiatingProcessCommandLine,\n    InitiatingProcessAccountName,\n    SHA256,\n    ReportId",
+        "queryFrequency": "PT1H",
+        "queryPeriod": "PT1H",
+        "triggerOperator": "GreaterThan",
+        "triggerThreshold": 0,
+        "suppressionDuration": "PT5H",
+        "suppressionEnabled": false,
+        "tactics": [
+          "Collection",
+          "Persistence"
+        ],
+        "techniques": [
+          "T1074",
+          "T1547"
+        ],
+        "incidentConfiguration": {
+          "createIncident": true,
+          "groupingConfiguration": {
+            "enabled": true,
+            "reopenClosedIncident": false,
+            "lookbackDuration": "PT5H",
+            "matchingMethod": "AllEntities",
+            "groupByEntities": [
+              "Host"
+            ],
+            "groupByAlertDetails": [],
+            "groupByCustomDetails": []
+          }
+        },
+        "eventGroupingSettings": {
+          "aggregationKind": "AlertPerResult"
+        },
+        "customDetails": {
+          "ArtifactType": "ArtifactType",
+          "ArtifactCategory": "ArtifactCategory",
+          "FilePath": "FolderPath"
+        },
+        "entityMappings": [
+          {
+            "entityType": "Host",
+            "fieldMappings": [
+              {
+                "identifier": "HostName",
+                "columnName": "DeviceName"
+              }
+            ]
+          },
+          {
+            "entityType": "Account",
+            "fieldMappings": [
+              {
+                "identifier": "Name",
+                "columnName": "InitiatingProcessAccountName"
+              }
+            ]
+          },
+          {
+            "entityType": "File",
+            "fieldMappings": [
+              {
+                "identifier": "Name",
+                "columnName": "FileName"
+              },
+              {
+                "identifier": "Directory",
+                "columnName": "FolderPath"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "[concat(resourceId('Microsoft.OperationalInsights/workspaces/providers', parameters('workspace'), 'Microsoft.SecurityInsights'),'/alertRules/','11111111-1111-1111-1111-111111111102')]",
+      "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/','11111111-1111-1111-1111-111111111102')]",
+      "type": "Microsoft.OperationalInsights/workspaces/providers/alertRules",
+      "kind": "Scheduled",
+      "apiVersion": "2022-11-01-preview",
+      "properties": {
+        "displayName": "Unauthorized AI Agent - Process Execution Detection",
+        "description": "Detects execution of Clawdbot, Moltbot, or OpenClaw processes including gateway and agent components. Excludes browser processes to reduce false positives from users viewing articles about these tools.",
+        "severity": "High",
+        "enabled": true,
+        "query": "DeviceProcessEvents\n| where TimeGenerated > ago(1h)\n// Exclude browsers to prevent false positives from URLs containing tool names\n| where FileName !in~ (\n    \"msedge.exe\",\n    \"chrome.exe\",\n    \"firefox.exe\",\n    \"brave.exe\",\n    \"iexplore.exe\",\n    \"safari.exe\",\n    \"opera.exe\",\n    \"vivaldi.exe\",\n    \"msedgewebview2.exe\",\n    \"chromium.exe\"\n)\n| where ProcessCommandLine has_any (\n    \"clawdbot\",\n    \"moltbot\",\n    \"openclaw\",\n    \"openclaw-gateway\",\n    \"openclaw-agent\",\n    \"openclaw onboard\",\n    \"openclaw gateway\",\n    \"openclaw agent\"\n)\n    or FileName has_any (\n    \"clawdbot\",\n    \"moltbot\",\n    \"openclaw\"\n)\n    or FolderPath has_any (\n    \".clawdbot\",\n    \".moltbot\",\n    \".openclaw\",\n    \"node_modules\\\\clawdbot\",\n    \"node_modules\\\\moltbot\",\n    \"node_modules\\\\openclaw\",\n    \"node_modules\\\\@openclaw\"\n)\n| extend ThreatType = case(\n    ProcessCommandLine has \"clawdbot\" or FileName has \"clawdbot\", \"Clawdbot\",\n    ProcessCommandLine has \"moltbot\" or FileName has \"moltbot\", \"Moltbot\",\n    ProcessCommandLine has \"openclaw\" or FileName has \"openclaw\", \"OpenClaw\",\n    \"Unknown\"\n)\n| extend CommandType = case(\n    ProcessCommandLine has \"gateway\", \"Gateway Server\",\n    ProcessCommandLine has \"agent\", \"Agent Process\",\n    ProcessCommandLine has \"onboard\", \"Onboarding/Setup\",\n    ProcessCommandLine has \"message\", \"Message Send\",\n    \"General Execution\"\n)\n| project \n    TimeGenerated,\n    DeviceName,\n    DeviceId,\n    FileName,\n    FolderPath,\n    ProcessCommandLine,\n    ThreatType,\n    CommandType,\n    AccountName,\n    AccountDomain,\n    InitiatingProcessFileName,\n    InitiatingProcessCommandLine,\n    InitiatingProcessParentFileName,\n    SHA256,\n    ReportId",
+        "queryFrequency": "PT1H",
+        "queryPeriod": "PT1H",
+        "triggerOperator": "GreaterThan",
+        "triggerThreshold": 0,
+        "suppressionDuration": "PT5H",
+        "suppressionEnabled": false,
+        "tactics": [
+          "Execution",
+          "CommandAndControl"
+        ],
+        "techniques": [
+          "T1059"
+        ],
+        "incidentConfiguration": {
+          "createIncident": true,
+          "groupingConfiguration": {
+            "enabled": true,
+            "reopenClosedIncident": false,
+            "lookbackDuration": "PT5H",
+            "matchingMethod": "AllEntities",
+            "groupByEntities": [
+              "Host",
+              "Account"
+            ],
+            "groupByAlertDetails": [],
+            "groupByCustomDetails": []
+          }
+        },
+        "eventGroupingSettings": {
+          "aggregationKind": "AlertPerResult"
+        },
+        "customDetails": {
+          "ThreatType": "ThreatType",
+          "CommandType": "CommandType",
+          "CommandLine": "ProcessCommandLine"
+        },
+        "entityMappings": [
+          {
+            "entityType": "Host",
+            "fieldMappings": [
+              {
+                "identifier": "HostName",
+                "columnName": "DeviceName"
+              }
+            ]
+          },
+          {
+            "entityType": "Account",
+            "fieldMappings": [
+              {
+                "identifier": "Name",
+                "columnName": "AccountName"
+              },
+              {
+                "identifier": "NTDomain",
+                "columnName": "AccountDomain"
+              }
+            ]
+          },
+          {
+            "entityType": "Process",
+            "fieldMappings": [
+              {
+                "identifier": "CommandLine",
+                "columnName": "ProcessCommandLine"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "[concat(resourceId('Microsoft.OperationalInsights/workspaces/providers', parameters('workspace'), 'Microsoft.SecurityInsights'),'/alertRules/','11111111-1111-1111-1111-111111111103')]",
+      "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/','11111111-1111-1111-1111-111111111103')]",
+      "type": "Microsoft.OperationalInsights/workspaces/providers/alertRules",
+      "kind": "Scheduled",
+      "apiVersion": "2022-11-01-preview",
+      "properties": {
+        "displayName": "Unauthorized AI Agent - Gateway Network Activity (Port 18789)",
+        "description": "Detects network connections on port 18789, the default WebSocket gateway port used by OpenClaw and similar AI agent tools.",
+        "severity": "High",
+        "enabled": true,
+        "query": "DeviceNetworkEvents\n| where TimeGenerated > ago(1h)\n| where LocalPort == 18789 or RemotePort == 18789\n| extend ConnectionDirection = case(\n    LocalPort == 18789, \"Inbound/Listening\",\n    RemotePort == 18789, \"Outbound\",\n    \"Unknown\"\n)\n| extend IsLocalhost = iff(RemoteIP in (\"127.0.0.1\", \"::1\", \"localhost\"), true, false)\n| project \n    TimeGenerated,\n    DeviceName,\n    DeviceId,\n    ConnectionDirection,\n    LocalIP,\n    LocalPort,\n    RemoteIP,\n    RemotePort,\n    IsLocalhost,\n    InitiatingProcessFileName,\n    InitiatingProcessCommandLine,\n    InitiatingProcessAccountName,\n    ReportId",
+        "queryFrequency": "PT1H",
+        "queryPeriod": "PT1H",
+        "triggerOperator": "GreaterThan",
+        "triggerThreshold": 0,
+        "suppressionDuration": "PT5H",
+        "suppressionEnabled": false,
+        "tactics": [
+          "CommandAndControl"
+        ],
+        "techniques": [
+          "T1571"
+        ],
+        "incidentConfiguration": {
+          "createIncident": true,
+          "groupingConfiguration": {
+            "enabled": true,
+            "reopenClosedIncident": false,
+            "lookbackDuration": "PT5H",
+            "matchingMethod": "AllEntities",
+            "groupByEntities": [
+              "Host"
+            ],
+            "groupByAlertDetails": [],
+            "groupByCustomDetails": []
+          }
+        },
+        "eventGroupingSettings": {
+          "aggregationKind": "AlertPerResult"
+        },
+        "customDetails": {
+          "Direction": "ConnectionDirection",
+          "ProcessName": "InitiatingProcessFileName"
+        },
+        "entityMappings": [
+          {
+            "entityType": "Host",
+            "fieldMappings": [
+              {
+                "identifier": "HostName",
+                "columnName": "DeviceName"
+              }
+            ]
+          },
+          {
+            "entityType": "IP",
+            "fieldMappings": [
+              {
+                "identifier": "Address",
+                "columnName": "RemoteIP"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "[concat(resourceId('Microsoft.OperationalInsights/workspaces/providers', parameters('workspace'), 'Microsoft.SecurityInsights'),'/alertRules/','11111111-1111-1111-1111-111111111104')]",
+      "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/','11111111-1111-1111-1111-111111111104')]",
+      "type": "Microsoft.OperationalInsights/workspaces/providers/alertRules",
+      "kind": "Scheduled",
+      "apiVersion": "2022-11-01-preview",
+      "properties": {
+        "displayName": "Unauthorized AI Agent - mDNS Discovery Activity (Port 5353)",
+        "description": "Detects mDNS/Bonjour traffic on port 5353 UDP which may indicate AI agent gateway discovery protocols.",
+        "severity": "Medium",
+        "enabled": true,
+        "query": "DeviceNetworkEvents\n| where TimeGenerated > ago(1h)\n| where LocalPort == 5353 or RemotePort == 5353\n| where Protocol == \"Udp\"\n| project \n    TimeGenerated,\n    DeviceName,\n    DeviceId,\n    LocalIP,\n    LocalPort,\n    RemoteIP,\n    RemotePort,\n    InitiatingProcessFileName,\n    InitiatingProcessCommandLine,\n    InitiatingProcessAccountName,\n    ReportId",
+        "queryFrequency": "PT1H",
+        "queryPeriod": "PT1H",
+        "triggerOperator": "GreaterThan",
+        "triggerThreshold": 5,
+        "suppressionDuration": "PT5H",
+        "suppressionEnabled": false,
+        "tactics": [
+          "Discovery"
+        ],
+        "techniques": [
+          "T1046"
+        ],
+        "incidentConfiguration": {
+          "createIncident": true,
+          "groupingConfiguration": {
+            "enabled": true,
+            "reopenClosedIncident": false,
+            "lookbackDuration": "PT5H",
+            "matchingMethod": "AllEntities",
+            "groupByEntities": [
+              "Host"
+            ],
+            "groupByAlertDetails": [],
+            "groupByCustomDetails": []
+          }
+        },
+        "eventGroupingSettings": {
+          "aggregationKind": "AlertPerResult"
+        },
+        "customDetails": {
+          "ProcessName": "InitiatingProcessFileName"
+        },
+        "entityMappings": [
+          {
+            "entityType": "Host",
+            "fieldMappings": [
+              {
+                "identifier": "HostName",
+                "columnName": "DeviceName"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "[concat(resourceId('Microsoft.OperationalInsights/workspaces/providers', parameters('workspace'), 'Microsoft.SecurityInsights'),'/alertRules/','11111111-1111-1111-1111-111111111105')]",
+      "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/','11111111-1111-1111-1111-111111111105')]",
+      "type": "Microsoft.OperationalInsights/workspaces/providers/alertRules",
+      "kind": "Scheduled",
+      "apiVersion": "2022-11-01-preview",
+      "properties": {
+        "displayName": "Unauthorized AI Agent - npm Package Installation",
+        "description": "Detects installation of Clawdbot, Moltbot, or OpenClaw npm packages via npm, pnpm, yarn, or bun package managers.",
+        "severity": "High",
+        "enabled": true,
+        "query": "DeviceProcessEvents\n| where TimeGenerated > ago(1h)\n| where FileName in~ (\"npm.cmd\", \"npm\", \"pnpm.cmd\", \"pnpm\", \"yarn.cmd\", \"yarn\", \"bun.exe\", \"bun\")\n| where ProcessCommandLine has_any (\n    \"install clawdbot\",\n    \"install moltbot\",\n    \"install openclaw\",\n    \"install @openclaw\",\n    \"add clawdbot\",\n    \"add moltbot\",\n    \"add openclaw\",\n    \"i clawdbot\",\n    \"i moltbot\",\n    \"i openclaw\"\n)\n| extend PackageManager = case(\n    FileName has \"npm\", \"npm\",\n    FileName has \"pnpm\", \"pnpm\",\n    FileName has \"yarn\", \"yarn\",\n    FileName has \"bun\", \"bun\",\n    \"Unknown\"\n)\n| extend PackageType = case(\n    ProcessCommandLine has \"clawdbot\", \"Clawdbot\",\n    ProcessCommandLine has \"moltbot\", \"Moltbot\",\n    ProcessCommandLine has \"openclaw\", \"OpenClaw\",\n    \"Unknown\"\n)\n| extend GlobalInstall = iff(ProcessCommandLine has \"-g\" or ProcessCommandLine has \"--global\", true, false)\n| project \n    TimeGenerated,\n    DeviceName,\n    DeviceId,\n    PackageManager,\n    PackageType,\n    GlobalInstall,\n    ProcessCommandLine,\n    AccountName,\n    AccountDomain,\n    InitiatingProcessFileName,\n    ReportId",
+        "queryFrequency": "PT1H",
+        "queryPeriod": "PT1H",
+        "triggerOperator": "GreaterThan",
+        "triggerThreshold": 0,
+        "suppressionDuration": "PT5H",
+        "suppressionEnabled": false,
+        "tactics": [
+          "Execution",
+          "Persistence"
+        ],
+        "techniques": [
+          "T1059.007"
+        ],
+        "incidentConfiguration": {
+          "createIncident": true,
+          "groupingConfiguration": {
+            "enabled": true,
+            "reopenClosedIncident": false,
+            "lookbackDuration": "PT5H",
+            "matchingMethod": "AllEntities",
+            "groupByEntities": [
+              "Host",
+              "Account"
+            ],
+            "groupByAlertDetails": [],
+            "groupByCustomDetails": []
+          }
+        },
+        "eventGroupingSettings": {
+          "aggregationKind": "AlertPerResult"
+        },
+        "customDetails": {
+          "PackageManager": "PackageManager",
+          "PackageType": "PackageType",
+          "GlobalInstall": "GlobalInstall"
+        },
+        "entityMappings": [
+          {
+            "entityType": "Host",
+            "fieldMappings": [
+              {
+                "identifier": "HostName",
+                "columnName": "DeviceName"
+              }
+            ]
+          },
+          {
+            "entityType": "Account",
+            "fieldMappings": [
+              {
+                "identifier": "Name",
+                "columnName": "AccountName"
+              },
+              {
+                "identifier": "NTDomain",
+                "columnName": "AccountDomain"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "[concat(resourceId('Microsoft.OperationalInsights/workspaces/providers', parameters('workspace'), 'Microsoft.SecurityInsights'),'/alertRules/','11111111-1111-1111-1111-111111111106')]",
+      "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/','11111111-1111-1111-1111-111111111106')]",
+      "type": "Microsoft.OperationalInsights/workspaces/providers/alertRules",
+      "kind": "Scheduled",
+      "apiVersion": "2022-11-01-preview",
+      "properties": {
+        "displayName": "Unauthorized AI Agent - Suspicious API Traffic to AI Providers",
+        "description": "Detects non-browser processes connecting to AI provider APIs (Anthropic, OpenAI, ElevenLabs, OpenRouter) which may indicate unauthorized AI agent activity.",
+        "severity": "Medium",
+        "enabled": true,
+        "query": "DeviceNetworkEvents\n| where TimeGenerated > ago(1h)\n| where RemoteUrl has_any (\n    \"api.anthropic.com\",\n    \"api.openai.com\",\n    \"api.elevenlabs.io\",\n    \"openrouter.ai\",\n    \"api.firecrawl.dev\"\n)\n// Exclude browser processes\n| where InitiatingProcessFileName !in~ (\n    \"chrome.exe\",\n    \"msedge.exe\",\n    \"firefox.exe\",\n    \"brave.exe\",\n    \"iexplore.exe\",\n    \"opera.exe\",\n    \"vivaldi.exe\",\n    \"safari.exe\",\n    \"msedgewebview2.exe\",\n    \"chromium.exe\",\n    \"Teams.exe\",\n    \"ms-teams.exe\"\n)\n| extend AIProvider = case(\n    RemoteUrl has \"anthropic\", \"Anthropic (Claude)\",\n    RemoteUrl has \"openai\", \"OpenAI\",\n    RemoteUrl has \"elevenlabs\", \"ElevenLabs (TTS)\",\n    RemoteUrl has \"openrouter\", \"OpenRouter\",\n    RemoteUrl has \"firecrawl\", \"Firecrawl\",\n    \"Other AI Provider\"\n)\n| project\n    TimeGenerated,\n    DeviceName,\n    DeviceId,\n    AIProvider,\n    RemoteUrl,\n    RemoteIP,\n    RemotePort,\n    InitiatingProcessFileName,\n    InitiatingProcessFolderPath,\n    InitiatingProcessCommandLine,\n    InitiatingProcessAccountName,\n    InitiatingProcessAccountDomain,\n    ReportId",
+        "queryFrequency": "PT1H",
+        "queryPeriod": "PT1H",
+        "triggerOperator": "GreaterThan",
+        "triggerThreshold": 0,
+        "suppressionDuration": "PT5H",
+        "suppressionEnabled": false,
+        "tactics": [
+          "Exfiltration",
+          "CommandAndControl"
+        ],
+        "techniques": [
+          "T1041",
+          "T1071"
+        ],
+        "incidentConfiguration": {
+          "createIncident": true,
+          "groupingConfiguration": {
+            "enabled": true,
+            "reopenClosedIncident": false,
+            "lookbackDuration": "PT5H",
+            "matchingMethod": "AllEntities",
+            "groupByEntities": [
+              "Host",
+              "Account"
+            ],
+            "groupByAlertDetails": [],
+            "groupByCustomDetails": []
+          }
+        },
+        "eventGroupingSettings": {
+          "aggregationKind": "AlertPerResult"
+        },
+        "customDetails": {
+          "AIProvider": "AIProvider",
+          "ProcessName": "InitiatingProcessFileName",
+          "TargetURL": "RemoteUrl"
+        },
+        "entityMappings": [
+          {
+            "entityType": "Host",
+            "fieldMappings": [
+              {
+                "identifier": "HostName",
+                "columnName": "DeviceName"
+              }
+            ]
+          },
+          {
+            "entityType": "Account",
+            "fieldMappings": [
+              {
+                "identifier": "Name",
+                "columnName": "InitiatingProcessAccountName"
+              },
+              {
+                "identifier": "NTDomain",
+                "columnName": "InitiatingProcessAccountDomain"
+              }
+            ]
+          },
+          {
+            "entityType": "IP",
+            "fieldMappings": [
+              {
+                "identifier": "Address",
+                "columnName": "RemoteIP"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "[concat(resourceId('Microsoft.OperationalInsights/workspaces/providers', parameters('workspace'), 'Microsoft.SecurityInsights'),'/alertRules/','11111111-1111-1111-1111-111111111107')]",
+      "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/','11111111-1111-1111-1111-111111111107')]",
+      "type": "Microsoft.OperationalInsights/workspaces/providers/alertRules",
+      "kind": "Scheduled",
+      "apiVersion": "2022-11-01-preview",
+      "properties": {
+        "displayName": "Unauthorized AI Agent - Registry Persistence",
+        "description": "Detects registry modifications in Run/RunOnce keys that may indicate AI agent persistence mechanisms.",
+        "severity": "High",
+        "enabled": true,
+        "query": "DeviceRegistryEvents\n| where TimeGenerated > ago(1h)\n| where RegistryKey has_any (\"\\\\CurrentVersion\\\\Run\", \"\\\\CurrentVersion\\\\RunOnce\")\n| where RegistryValueData has_any (\"clawdbot\", \"moltbot\", \"openclaw\")\n    or RegistryValueName has_any (\"clawdbot\", \"moltbot\", \"openclaw\")\n| extend ThreatType = case(\n    RegistryValueData has \"clawdbot\" or RegistryValueName has \"clawdbot\", \"Clawdbot\",\n    RegistryValueData has \"moltbot\" or RegistryValueName has \"moltbot\", \"Moltbot\",\n    RegistryValueData has \"openclaw\" or RegistryValueName has \"openclaw\", \"OpenClaw\",\n    \"Unknown\"\n)\n| project \n    TimeGenerated,\n    DeviceName,\n    DeviceId,\n    ThreatType,\n    ActionType,\n    RegistryKey,\n    RegistryValueName,\n    RegistryValueData,\n    InitiatingProcessFileName,\n    InitiatingProcessCommandLine,\n    InitiatingProcessAccountName,\n    ReportId",
+        "queryFrequency": "PT1H",
+        "queryPeriod": "PT1H",
+        "triggerOperator": "GreaterThan",
+        "triggerThreshold": 0,
+        "suppressionDuration": "PT5H",
+        "suppressionEnabled": false,
+        "tactics": [
+          "Persistence"
+        ],
+        "techniques": [
+          "T1547.001"
+        ],
+        "incidentConfiguration": {
+          "createIncident": true,
+          "groupingConfiguration": {
+            "enabled": true,
+            "reopenClosedIncident": false,
+            "lookbackDuration": "PT5H",
+            "matchingMethod": "AllEntities",
+            "groupByEntities": [
+              "Host"
+            ],
+            "groupByAlertDetails": [],
+            "groupByCustomDetails": []
+          }
+        },
+        "eventGroupingSettings": {
+          "aggregationKind": "AlertPerResult"
+        },
+        "customDetails": {
+          "ThreatType": "ThreatType",
+          "RegistryValue": "RegistryValueData"
+        },
+        "entityMappings": [
+          {
+            "entityType": "Host",
+            "fieldMappings": [
+              {
+                "identifier": "HostName",
+                "columnName": "DeviceName"
+              }
+            ]
+          },
+          {
+            "entityType": "RegistryKey",
+            "fieldMappings": [
+              {
+                "identifier": "Key",
+                "columnName": "RegistryKey"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "[concat(resourceId('Microsoft.OperationalInsights/workspaces/providers', parameters('workspace'), 'Microsoft.SecurityInsights'),'/alertRules/','11111111-1111-1111-1111-111111111108')]",
+      "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/','11111111-1111-1111-1111-111111111108')]",
+      "type": "Microsoft.OperationalInsights/workspaces/providers/alertRules",
+      "kind": "Scheduled",
+      "apiVersion": "2022-11-01-preview",
+      "properties": {
+        "displayName": "Unauthorized AI Agent - Scheduled Task Creation",
+        "description": "Detects creation of scheduled tasks related to AI agent tools for persistence.",
+        "severity": "High",
+        "enabled": true,
+        "query": "DeviceProcessEvents\n| where TimeGenerated > ago(1h)\n| where FileName =~ \"schtasks.exe\"\n| where ProcessCommandLine has \"/create\" or ProcessCommandLine has \"-create\"\n| where ProcessCommandLine has_any (\"clawdbot\", \"moltbot\", \"openclaw\")\n| extend ThreatType = case(\n    ProcessCommandLine has \"clawdbot\", \"Clawdbot\",\n    ProcessCommandLine has \"moltbot\", \"Moltbot\",\n    ProcessCommandLine has \"openclaw\", \"OpenClaw\",\n    \"Unknown\"\n)\n| project \n    TimeGenerated,\n    DeviceName,\n    DeviceId,\n    ThreatType,\n    ProcessCommandLine,\n    AccountName,\n    AccountDomain,\n    InitiatingProcessFileName,\n    ReportId",
+        "queryFrequency": "PT1H",
+        "queryPeriod": "PT1H",
+        "triggerOperator": "GreaterThan",
+        "triggerThreshold": 0,
+        "suppressionDuration": "PT5H",
+        "suppressionEnabled": false,
+        "tactics": [
+          "Persistence"
+        ],
+        "techniques": [
+          "T1053.005"
+        ],
+        "incidentConfiguration": {
+          "createIncident": true,
+          "groupingConfiguration": {
+            "enabled": true,
+            "reopenClosedIncident": false,
+            "lookbackDuration": "PT5H",
+            "matchingMethod": "AllEntities",
+            "groupByEntities": [
+              "Host"
+            ],
+            "groupByAlertDetails": [],
+            "groupByCustomDetails": []
+          }
+        },
+        "eventGroupingSettings": {
+          "aggregationKind": "AlertPerResult"
+        },
+        "customDetails": {
+          "ThreatType": "ThreatType"
+        },
+        "entityMappings": [
+          {
+            "entityType": "Host",
+            "fieldMappings": [
+              {
+                "identifier": "HostName",
+                "columnName": "DeviceName"
+              }
+            ]
+          },
+          {
+            "entityType": "Account",
+            "fieldMappings": [
+              {
+                "identifier": "Name",
+                "columnName": "AccountName"
+              },
+              {
+                "identifier": "NTDomain",
+                "columnName": "AccountDomain"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "[concat(resourceId('Microsoft.OperationalInsights/workspaces/providers', parameters('workspace'), 'Microsoft.SecurityInsights'),'/alertRules/','11111111-1111-1111-1111-111111111109')]",
+      "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/','11111111-1111-1111-1111-111111111109')]",
+      "type": "Microsoft.OperationalInsights/workspaces/providers/alertRules",
+      "kind": "Scheduled",
+      "apiVersion": "2022-11-01-preview",
+      "properties": {
+        "displayName": "Unauthorized AI Agent - Service Installation",
+        "description": "Detects installation of Windows services related to AI agent tools.",
+        "severity": "High",
+        "enabled": true,
+        "query": "DeviceProcessEvents\n| where TimeGenerated > ago(1h)\n| where FileName =~ \"sc.exe\"\n| where ProcessCommandLine has \"create\"\n| where ProcessCommandLine has_any (\"clawdbot\", \"moltbot\", \"openclaw\")\n| extend ThreatType = case(\n    ProcessCommandLine has \"clawdbot\", \"Clawdbot\",\n    ProcessCommandLine has \"moltbot\", \"Moltbot\",\n    ProcessCommandLine has \"openclaw\", \"OpenClaw\",\n    \"Unknown\"\n)\n| project \n    TimeGenerated,\n    DeviceName,\n    DeviceId,\n    ThreatType,\n    ProcessCommandLine,\n    AccountName,\n    AccountDomain,\n    InitiatingProcessFileName,\n    ReportId",
+        "queryFrequency": "PT1H",
+        "queryPeriod": "PT1H",
+        "triggerOperator": "GreaterThan",
+        "triggerThreshold": 0,
+        "suppressionDuration": "PT5H",
+        "suppressionEnabled": false,
+        "tactics": [
+          "Persistence"
+        ],
+        "techniques": [
+          "T1543.003"
+        ],
+        "incidentConfiguration": {
+          "createIncident": true,
+          "groupingConfiguration": {
+            "enabled": true,
+            "reopenClosedIncident": false,
+            "lookbackDuration": "PT5H",
+            "matchingMethod": "AllEntities",
+            "groupByEntities": [
+              "Host"
+            ],
+            "groupByAlertDetails": [],
+            "groupByCustomDetails": []
+          }
+        },
+        "eventGroupingSettings": {
+          "aggregationKind": "AlertPerResult"
+        },
+        "customDetails": {
+          "ThreatType": "ThreatType"
+        },
+        "entityMappings": [
+          {
+            "entityType": "Host",
+            "fieldMappings": [
+              {
+                "identifier": "HostName",
+                "columnName": "DeviceName"
+              }
+            ]
+          },
+          {
+            "entityType": "Account",
+            "fieldMappings": [
+              {
+                "identifier": "Name",
+                "columnName": "AccountName"
+              },
+              {
+                "identifier": "NTDomain",
+                "columnName": "AccountDomain"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "[concat(resourceId('Microsoft.OperationalInsights/workspaces/providers', parameters('workspace'), 'Microsoft.SecurityInsights'),'/alertRules/','11111111-1111-1111-1111-111111111110')]",
+      "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/','11111111-1111-1111-1111-111111111110')]",
+      "type": "Microsoft.OperationalInsights/workspaces/providers/alertRules",
+      "kind": "Scheduled",
+      "apiVersion": "2022-11-01-preview",
+      "properties": {
+        "displayName": "Unauthorized AI Agent - Node.js Spawning Shell Processes",
+        "description": "Detects Node.js processes spawning command shells which may indicate AI agent command execution.",
+        "severity": "Medium",
+        "enabled": true,
+        "query": "DeviceProcessEvents\n| where TimeGenerated > ago(1h)\n| where InitiatingProcessFileName in~ (\"node.exe\", \"node\")\n| where FileName in~ (\"cmd.exe\", \"powershell.exe\", \"pwsh.exe\", \"bash.exe\", \"wsl.exe\")\n| project \n    TimeGenerated,\n    DeviceName,\n    DeviceId,\n    FileName,\n    ProcessCommandLine,\n    AccountName,\n    AccountDomain,\n    InitiatingProcessFileName,\n    InitiatingProcessCommandLine,\n    InitiatingProcessFolderPath,\n    ReportId",
+        "queryFrequency": "PT1H",
+        "queryPeriod": "PT1H",
+        "triggerOperator": "GreaterThan",
+        "triggerThreshold": 5,
+        "suppressionDuration": "PT5H",
+        "suppressionEnabled": false,
+        "tactics": [
+          "Execution"
+        ],
+        "techniques": [
+          "T1059"
+        ],
+        "incidentConfiguration": {
+          "createIncident": true,
+          "groupingConfiguration": {
+            "enabled": true,
+            "reopenClosedIncident": false,
+            "lookbackDuration": "PT5H",
+            "matchingMethod": "AllEntities",
+            "groupByEntities": [
+              "Host"
+            ],
+            "groupByAlertDetails": [],
+            "groupByCustomDetails": []
+          }
+        },
+        "eventGroupingSettings": {
+          "aggregationKind": "AlertPerResult"
+        },
+        "customDetails": {
+          "ShellType": "FileName",
+          "NodePath": "InitiatingProcessFolderPath"
+        },
+        "entityMappings": [
+          {
+            "entityType": "Host",
+            "fieldMappings": [
+              {
+                "identifier": "HostName",
+                "columnName": "DeviceName"
+              }
+            ]
+          },
+          {
+            "entityType": "Account",
+            "fieldMappings": [
+              {
+                "identifier": "Name",
+                "columnName": "AccountName"
+              },
+              {
+                "identifier": "NTDomain",
+                "columnName": "AccountDomain"
+              }
+            ]
+          },
+          {
+            "entityType": "Process",
+            "fieldMappings": [
+              {
+                "identifier": "CommandLine",
+                "columnName": "ProcessCommandLine"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "[concat(resourceId('Microsoft.OperationalInsights/workspaces/providers', parameters('workspace'), 'Microsoft.SecurityInsights'),'/alertRules/','11111111-1111-1111-1111-111111111111')]",
+      "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/','11111111-1111-1111-1111-111111111111')]",
+      "type": "Microsoft.OperationalInsights/workspaces/providers/alertRules",
+      "kind": "Scheduled",
+      "apiVersion": "2022-11-01-preview",
+      "properties": {
+        "displayName": "Unauthorized AI Agent - WebSocket Gateway Connection",
+        "description": "Detects local WebSocket connections to the default AI agent gateway port which may indicate active agent communication.",
+        "severity": "High",
+        "enabled": true,
+        "query": "DeviceNetworkEvents\n| where TimeGenerated > ago(1h)\n| where RemoteIP in (\"127.0.0.1\", \"::1\")\n| where RemotePort == 18789\n| project \n    TimeGenerated,\n    DeviceName,\n    DeviceId,\n    LocalIP,\n    LocalPort,\n    RemoteIP,\n    RemotePort,\n    InitiatingProcessFileName,\n    InitiatingProcessCommandLine,\n    InitiatingProcessAccountName,\n    ReportId",
+        "queryFrequency": "PT1H",
+        "queryPeriod": "PT1H",
+        "triggerOperator": "GreaterThan",
+        "triggerThreshold": 0,
+        "suppressionDuration": "PT5H",
+        "suppressionEnabled": false,
+        "tactics": [
+          "CommandAndControl"
+        ],
+        "techniques": [
+          "T1071.001"
+        ],
+        "incidentConfiguration": {
+          "createIncident": true,
+          "groupingConfiguration": {
+            "enabled": true,
+            "reopenClosedIncident": false,
+            "lookbackDuration": "PT5H",
+            "matchingMethod": "AllEntities",
+            "groupByEntities": [
+              "Host"
+            ],
+            "groupByAlertDetails": [],
+            "groupByCustomDetails": []
+          }
+        },
+        "eventGroupingSettings": {
+          "aggregationKind": "AlertPerResult"
+        },
+        "customDetails": {
+          "ProcessName": "InitiatingProcessFileName"
+        },
+        "entityMappings": [
+          {
+            "entityType": "Host",
+            "fieldMappings": [
+              {
+                "identifier": "HostName",
+                "columnName": "DeviceName"
+              }
+            ]
+          },
+          {
+            "entityType": "Account",
+            "fieldMappings": [
+              {
+                "identifier": "Name",
+                "columnName": "InitiatingProcessAccountName"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

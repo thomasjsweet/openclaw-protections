@@ -1,0 +1,240 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# 🦞 Unauthorized AI Agent Detection Dashboard\n---\n\nThis workbook provides visibility into Clawdbot, Moltbot, and OpenClaw unauthorized AI agent activity across your environment.\n\n**Detection Categories:**\n- File Artifacts\n- Process Execution\n- Network Activity (Port 18789, mDNS)\n- Registry Persistence\n- Scheduled Tasks & Services\n- npm Package Installation\n- AI Provider API Traffic"
+      },
+      "name": "header"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "a2b5c6d7-1234-5678-9abc-def012345678",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "type": 4,
+            "isRequired": true,
+            "value": {
+              "durationMs": 604800000
+            },
+            "typeSettings": {
+              "selectableValues": [
+                {"durationMs": 3600000},
+                {"durationMs": 14400000},
+                {"durationMs": 43200000},
+                {"durationMs": 86400000},
+                {"durationMs": 172800000},
+                {"durationMs": 604800000},
+                {"durationMs": 1209600000},
+                {"durationMs": 2592000000}
+              ]
+            },
+            "label": "Time Range"
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let FileArtifacts = DeviceFileEvents\n| where TimeGenerated {TimeRange}\n| where FolderPath has_any (\".clawdbot\", \".moltbot\", \".openclaw\")\n| summarize FileCount = count() by DeviceName\n| extend DetectionType = \"File Artifacts\", Count = FileCount;\nlet ProcessExecutions = DeviceProcessEvents\n| where TimeGenerated {TimeRange}\n| where ProcessCommandLine has_any (\"clawdbot\", \"moltbot\", \"openclaw\") or FileName has_any (\"clawdbot\", \"moltbot\", \"openclaw\")\n| summarize ProcessCount = count() by DeviceName\n| extend DetectionType = \"Process Execution\", Count = ProcessCount;\nlet NetworkConnections = DeviceNetworkEvents\n| where TimeGenerated {TimeRange}\n| where LocalPort == 18789 or RemotePort == 18789\n| summarize NetworkCount = count() by DeviceName\n| extend DetectionType = \"Network Activity\", Count = NetworkCount;\nlet RegistryChanges = DeviceRegistryEvents\n| where TimeGenerated {TimeRange}\n| where RegistryValueData has_any (\"clawdbot\", \"moltbot\", \"openclaw\") or RegistryValueName has_any (\"clawdbot\", \"moltbot\", \"openclaw\")\n| summarize RegistryCount = count() by DeviceName\n| extend DetectionType = \"Registry Persistence\", Count = RegistryCount;\nunion FileArtifacts, ProcessExecutions, NetworkConnections, RegistryChanges\n| summarize TotalDetections = sum(Count) by DeviceName\n| extend RiskLevel = case(TotalDetections >= 10, \"Critical\", TotalDetections >= 5, \"High\", TotalDetections >= 2, \"Medium\", \"Low\")\n| project DeviceName, TotalDetections, RiskLevel\n| sort by TotalDetections desc",
+        "size": 0,
+        "title": "Affected Devices - Risk Summary",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "RiskLevel",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "colors",
+                "thresholdsGrid": [
+                  {"operator": "==", "thresholdValue": "Critical", "representation": "redBright", "text": "{0}{1}"},
+                  {"operator": "==", "thresholdValue": "High", "representation": "orange", "text": "{0}{1}"},
+                  {"operator": "==", "thresholdValue": "Medium", "representation": "yellow", "text": "{0}{1}"},
+                  {"operator": "Default", "thresholdValue": null, "representation": "green", "text": "{0}{1}"}
+                ]
+              }
+            },
+            {
+              "columnMatch": "TotalDetections",
+              "formatter": 4,
+              "formatOptions": {
+                "palette": "redGreen"
+              }
+            }
+          ]
+        }
+      },
+      "name": "riskSummaryTable"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let FileArtifacts = DeviceFileEvents\n| where TimeGenerated {TimeRange}\n| where FolderPath has_any (\".clawdbot\", \".moltbot\", \".openclaw\")\n| summarize Count = count()\n| extend Category = \"File Artifacts\";\nlet ProcessExecutions = DeviceProcessEvents\n| where TimeGenerated {TimeRange}\n| where ProcessCommandLine has_any (\"clawdbot\", \"moltbot\", \"openclaw\") or FileName has_any (\"clawdbot\", \"moltbot\", \"openclaw\")\n| summarize Count = count()\n| extend Category = \"Process Execution\";\nlet NetworkActivity = DeviceNetworkEvents\n| where TimeGenerated {TimeRange}\n| where LocalPort == 18789 or RemotePort == 18789\n| summarize Count = count()\n| extend Category = \"Network (Port 18789)\";\nlet Registry = DeviceRegistryEvents\n| where TimeGenerated {TimeRange}\n| where RegistryValueData has_any (\"clawdbot\", \"moltbot\", \"openclaw\") or RegistryValueName has_any (\"clawdbot\", \"moltbot\", \"openclaw\")\n| summarize Count = count()\n| extend Category = \"Registry Persistence\";\nlet npm = DeviceProcessEvents\n| where TimeGenerated {TimeRange}\n| where FileName in~ (\"npm.cmd\", \"npm\", \"pnpm.cmd\", \"pnpm\", \"yarn.cmd\", \"yarn\")\n| where ProcessCommandLine has_any (\"install clawdbot\", \"install moltbot\", \"install openclaw\")\n| summarize Count = count()\n| extend Category = \"npm Installation\";\nunion FileArtifacts, ProcessExecutions, NetworkActivity, Registry, npm\n| project Category, Count",
+        "size": 1,
+        "title": "Detection Categories Overview",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "piechart"
+      },
+      "customWidth": "50",
+      "name": "detectionPieChart"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let FileEvents = DeviceFileEvents\n| where TimeGenerated {TimeRange}\n| where FolderPath has_any (\".clawdbot\", \".moltbot\", \".openclaw\")\n| summarize Count = count() by bin(TimeGenerated, 1h);\nlet ProcessEvents = DeviceProcessEvents\n| where TimeGenerated {TimeRange}\n| where ProcessCommandLine has_any (\"clawdbot\", \"moltbot\", \"openclaw\")\n| summarize Count = count() by bin(TimeGenerated, 1h);\nunion FileEvents, ProcessEvents\n| summarize TotalCount = sum(Count) by TimeGenerated\n| order by TimeGenerated asc",
+        "size": 0,
+        "title": "Detection Timeline",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "timechart"
+      },
+      "customWidth": "50",
+      "name": "detectionTimeline"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "---\n## 📁 File Artifact Detections"
+      },
+      "name": "fileArtifactHeader"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceFileEvents\n| where TimeGenerated {TimeRange}\n| where FolderPath has_any (\".clawdbot\", \".moltbot\", \".openclaw\")\n| extend ArtifactType = case(FolderPath has \".clawdbot\", \"Clawdbot\", FolderPath has \".moltbot\", \"Moltbot\", FolderPath has \".openclaw\", \"OpenClaw\", \"Unknown\")\n| project TimeGenerated, DeviceName, ArtifactType, FileName, FolderPath, ActionType, InitiatingProcessFileName, InitiatingProcessAccountName\n| sort by TimeGenerated desc\n| take 100",
+        "size": 0,
+        "title": "Recent File Artifacts",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table"
+      },
+      "name": "fileArtifactsTable"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "---\n## ⚙️ Process Execution Detections"
+      },
+      "name": "processHeader"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceProcessEvents\n| where TimeGenerated {TimeRange}\n| where ProcessCommandLine has_any (\"clawdbot\", \"moltbot\", \"openclaw\") or FileName has_any (\"clawdbot\", \"moltbot\", \"openclaw\")\n| extend ThreatType = case(ProcessCommandLine has \"clawdbot\" or FileName has \"clawdbot\", \"Clawdbot\", ProcessCommandLine has \"moltbot\" or FileName has \"moltbot\", \"Moltbot\", ProcessCommandLine has \"openclaw\" or FileName has \"openclaw\", \"OpenClaw\", \"Unknown\")\n| extend CommandType = case(ProcessCommandLine has \"gateway\", \"Gateway Server\", ProcessCommandLine has \"agent\", \"Agent Process\", ProcessCommandLine has \"onboard\", \"Onboarding\", \"General\")\n| project TimeGenerated, DeviceName, ThreatType, CommandType, FileName, ProcessCommandLine, AccountName, InitiatingProcessFileName\n| sort by TimeGenerated desc\n| take 100",
+        "size": 0,
+        "title": "Recent Process Executions",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table"
+      },
+      "name": "processTable"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "---\n## 🌐 Network Activity"
+      },
+      "name": "networkHeader"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceNetworkEvents\n| where TimeGenerated {TimeRange}\n| where LocalPort == 18789 or RemotePort == 18789\n| extend ConnectionDirection = case(LocalPort == 18789, \"Inbound/Listening\", RemotePort == 18789, \"Outbound\", \"Unknown\")\n| project TimeGenerated, DeviceName, ConnectionDirection, LocalIP, LocalPort, RemoteIP, RemotePort, InitiatingProcessFileName, InitiatingProcessAccountName\n| sort by TimeGenerated desc\n| take 100",
+        "size": 0,
+        "title": "Gateway Network Connections (Port 18789)",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table"
+      },
+      "name": "networkTable"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceNetworkEvents\n| where TimeGenerated {TimeRange}\n| where RemoteUrl has_any (\"api.anthropic.com\", \"api.openai.com\", \"api.elevenlabs.io\", \"openrouter.ai\")\n| extend AIProvider = case(RemoteUrl has \"anthropic\", \"Anthropic\", RemoteUrl has \"openai\", \"OpenAI\", RemoteUrl has \"elevenlabs\", \"ElevenLabs\", RemoteUrl has \"openrouter\", \"OpenRouter\", \"Other\")\n| where InitiatingProcessFileName !in~ (\"chrome.exe\", \"msedge.exe\", \"firefox.exe\")\n| project TimeGenerated, DeviceName, AIProvider, RemoteUrl, RemoteIP, InitiatingProcessFileName, InitiatingProcessAccountName\n| sort by TimeGenerated desc\n| take 100",
+        "size": 0,
+        "title": "AI Provider API Traffic (Non-Browser)",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table"
+      },
+      "name": "apiTrafficTable"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "---\n## 🔒 Persistence Mechanisms"
+      },
+      "name": "persistenceHeader"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceRegistryEvents\n| where TimeGenerated {TimeRange}\n| where RegistryKey has_any (\"\\\\CurrentVersion\\\\Run\", \"\\\\CurrentVersion\\\\RunOnce\")\n| where RegistryValueData has_any (\"clawdbot\", \"moltbot\", \"openclaw\") or RegistryValueName has_any (\"clawdbot\", \"moltbot\", \"openclaw\")\n| extend ThreatType = case(RegistryValueData has \"clawdbot\" or RegistryValueName has \"clawdbot\", \"Clawdbot\", RegistryValueData has \"moltbot\" or RegistryValueName has \"moltbot\", \"Moltbot\", RegistryValueData has \"openclaw\" or RegistryValueName has \"openclaw\", \"OpenClaw\", \"Unknown\")\n| project TimeGenerated, DeviceName, ThreatType, ActionType, RegistryKey, RegistryValueName, RegistryValueData, InitiatingProcessAccountName\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0,
+        "title": "Registry Persistence",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table"
+      },
+      "name": "registryTable"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceProcessEvents\n| where TimeGenerated {TimeRange}\n| where FileName in~ (\"schtasks.exe\", \"sc.exe\")\n| where ProcessCommandLine has_any (\"clawdbot\", \"moltbot\", \"openclaw\")\n| extend PersistenceType = case(FileName == \"schtasks.exe\", \"Scheduled Task\", FileName == \"sc.exe\", \"Windows Service\", \"Unknown\")\n| extend ThreatType = case(ProcessCommandLine has \"clawdbot\", \"Clawdbot\", ProcessCommandLine has \"moltbot\", \"Moltbot\", ProcessCommandLine has \"openclaw\", \"OpenClaw\", \"Unknown\")\n| project TimeGenerated, DeviceName, ThreatType, PersistenceType, ProcessCommandLine, AccountName\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0,
+        "title": "Scheduled Tasks & Services",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table"
+      },
+      "name": "tasksServicesTable"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "---\n## 📦 Package Installation Activity"
+      },
+      "name": "npmHeader"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "DeviceProcessEvents\n| where TimeGenerated {TimeRange}\n| where FileName in~ (\"npm.cmd\", \"npm\", \"pnpm.cmd\", \"pnpm\", \"yarn.cmd\", \"yarn\", \"bun.exe\", \"bun\")\n| where ProcessCommandLine has_any (\"install clawdbot\", \"install moltbot\", \"install openclaw\", \"install @openclaw\", \"add clawdbot\", \"add moltbot\", \"add openclaw\")\n| extend PackageManager = case(FileName has \"npm\", \"npm\", FileName has \"pnpm\", \"pnpm\", FileName has \"yarn\", \"yarn\", FileName has \"bun\", \"bun\", \"Unknown\")\n| extend PackageType = case(ProcessCommandLine has \"clawdbot\", \"Clawdbot\", ProcessCommandLine has \"moltbot\", \"Moltbot\", ProcessCommandLine has \"openclaw\", \"OpenClaw\", \"Unknown\")\n| extend GlobalInstall = iff(ProcessCommandLine has \"-g\" or ProcessCommandLine has \"--global\", \"Yes\", \"No\")\n| project TimeGenerated, DeviceName, PackageType, PackageManager, GlobalInstall, ProcessCommandLine, AccountName\n| sort by TimeGenerated desc\n| take 50",
+        "size": 0,
+        "title": "npm/pnpm/yarn Package Installations",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table"
+      },
+      "name": "npmTable"
+    }
+  ],
+  "styleSettings": {},
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}
